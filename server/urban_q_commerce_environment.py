@@ -1,104 +1,66 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-"""
-Urban Q Commerce Environment Implementation.
-
-A simple test environment that echoes back messages sent to it.
-Perfect for testing HTTP server infrastructure.
-"""
-
-from uuid import uuid4
-
-from openenv.core.env_server.interfaces import Environment
-from openenv.core.env_server.types import State
-
-try:
-    from ..models import UrbanQCommerceAction, UrbanQCommerceObservation
-except ImportError:
-    from models import UrbanQCommerceAction, UrbanQCommerceObservation
-
+import random
+import uuid
+from openenv.core.env_server import Environment
+from ..models import (
+    UrbanQCommerceAction, UrbanQCommerceObservation, 
+    UrbanQCommerceState, DemandNodeStatus
+)
 
 class UrbanQCommerceEnvironment(Environment):
-    """
-    A simple echo environment that echoes back messages.
+    SUPPORTS_CONCURRENT_SESSIONS = True
 
-    This environment is designed for testing the HTTP server infrastructure.
-    It maintains minimal state and simply echoes back whatever message it receives.
+    def __init__(self, task_level: str = "medium"):
+        self._state = UrbanQCommerceState()
+        self._cargo, self._pos_id, self._max_steps = 0, 0, 50
+        self.task_level = task_level
 
-    Example:
-        >>> env = UrbanQCommerceEnvironment()
-        >>> obs = env.reset()
-        >>> print(obs.echoed_message)  # "Urban Q Commerce environment ready!"
-        >>>
-        >>> obs = env.step(UrbanQCommerceAction(message="Hello"))
-        >>> print(obs.echoed_message)  # "Hello"
-        >>> print(obs.message_length)  # 5
-    """
-
-    # Enable concurrent WebSocket sessions.
-    # Set to True if your environment isolates state between instances.
-    # When True, multiple WebSocket clients can connect simultaneously, each
-    # getting their own environment instance (when using factory mode in app.py).
-    SUPPORTS_CONCURRENT_SESSIONS: bool = True
-
-    def __init__(self):
-        """Initialize the urban_q_commerce environment."""
-        self._state = State(episode_id=str(uuid4()), step_count=0)
-        self._reset_count = 0
-
-    def reset(self) -> UrbanQCommerceObservation:
-        """
-        Reset the environment.
-
-        Returns:
-            UrbanQCommerceObservation with a ready message
-        """
-        self._state = State(episode_id=str(uuid4()), step_count=0)
-        self._reset_count += 1
-
-        return UrbanQCommerceObservation(
-            echoed_message="Urban Q Commerce environment ready!",
-            message_length=0,
-            done=False,
-            reward=0.0,
+    def reset(self, seed=None, episode_id=None, **kwargs) -> UrbanQCommerceObservation:
+        self._state = UrbanQCommerceState(
+            episode_id=episode_id or str(uuid.uuid4()), step_count=0,
+            nodes={i: {"id": i, "pos": (random.randint(0, 10), random.randint(0, 10)), 
+                       "stock": 20, "max": 30, "rate": 2} for i in range(1, 4)}
         )
+        self._cargo = 50
+        return self._obs("System reset.")
 
-    def step(self, action: UrbanQCommerceAction) -> UrbanQCommerceObservation:  # type: ignore[override]
-        """
-        Execute a step in the environment by echoing the message.
-
-        Args:
-            action: UrbanQCommerceAction containing the message to echo
-
-        Returns:
-            UrbanQCommerceObservation with the echoed message and its length
-        """
+    def step(self, action: UrbanQCommerceAction, **kwargs) -> UrbanQCommerceObservation:
         self._state.step_count += 1
+        if action.action_type == "REFILL": 
+            self._cargo, self._pos_id = 50, 0
+        elif action.action_type == "DISPATCH":
+            node = self._state.nodes.get(action.target_node_id)
+            if node:
+                self._pos_id = action.target_node_id
+                transfer = min(self._cargo, node["max"] - node["stock"])
+                node["stock"] += transfer
+                self._cargo -= transfer
+        
+        for n in self._state.nodes.values():
+            n["stock"] -= n["rate"]
+            if n["stock"] < 0: 
+                n["stock"] = 0
+                self._state.total_sla_breaches += 1
 
-        message = action.message
-        length = len(message)
+        done = self._state.step_count >= self._max_steps
+        obs = self._obs("Step complete")
+        obs.done = done
+        obs.reward = max(0.0, 1.0 - (self._state.total_sla_breaches * 0.1)) if done else 0.0
+        return obs
 
-        # Simple reward: longer messages get higher rewards
-        reward = length * 0.1
-
+    def _obs(self, message: str) -> UrbanQCommerceObservation:
+        # THE FIX: Explicitly map the values to satisfy Pydantic's strict rules!
+        nodes = [DemandNodeStatus(
+                    node_id=n["id"], 
+                    position=n["pos"], 
+                    stock_remaining=n["stock"],
+                    consumption_rate=n["rate"], 
+                    is_sla_at_risk=n["stock"] <= 5
+                ) for n in self._state.nodes.values()]
+                
         return UrbanQCommerceObservation(
-            echoed_message=message,
-            message_length=length,
-            done=False,
-            reward=reward,
-            metadata={"original_message": message, "step": self._state.step_count},
+            done=False, reward=0.0, agent_node_id=self._pos_id, fleet_cargo=self._cargo,
+            active_nodes=nodes, steps_remaining=50 - self._state.step_count, message=message
         )
 
     @property
-    def state(self) -> State:
-        """
-        Get the current environment state.
-
-        Returns:
-            Current State with episode_id and step_count
-        """
-        return self._state
+    def state(self) -> UrbanQCommerceState: return self._state
