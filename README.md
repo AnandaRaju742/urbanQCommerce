@@ -4,8 +4,8 @@ emoji: 🚚
 colorFrom: blue
 colorTo: indigo
 sdk: docker
-app_port: 7860
-base_path: /web
+app_port: 8000
+base_path: /
 ---
 
 # Urban Q-Commerce Environment
