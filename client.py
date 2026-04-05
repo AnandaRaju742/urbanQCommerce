@@ -45,41 +45,27 @@ class UrbanQCommerceEnv(
     """
 
     def _step_payload(self, action: UrbanQCommerceAction) -> Dict:
-        """
-        Convert UrbanQCommerceAction to JSON payload for step message.
-
-        Args:
-            action: UrbanQCommerceAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
-        """
-        return {
-            "message": action.message,
-        }
+      return {
+          "action_type": action.action_type,
+          "target_node_id": action.target_node_id,
+      }
 
     def _parse_result(self, payload: Dict) -> StepResult[UrbanQCommerceObservation]:
-        """
-        Parse server response into StepResult[UrbanQCommerceObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with UrbanQCommerceObservation
-        """
         obs_data = payload.get("observation", {})
+
         observation = UrbanQCommerceObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
+            agent_node_id=obs_data.get("agent_node_id"),
+            fleet_cargo=obs_data.get("fleet_cargo"),
+            active_nodes=obs_data.get("active_nodes"),
+            steps_remaining=obs_data.get("steps_remaining"),
+            message=obs_data.get("message"),
             done=payload.get("done", False),
-            reward=payload.get("reward"),
-            metadata=obs_data.get("metadata", {}),
+            reward=payload.get("reward", 0.0),
         )
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
+            reward=payload.get("reward", 0.0),
             done=payload.get("done", False),
         )
 
