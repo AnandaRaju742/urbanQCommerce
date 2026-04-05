@@ -1,10 +1,18 @@
 import random
 import uuid
 from openenv.core.env_server import Environment
-from ..models import (
-    UrbanQCommerceAction, UrbanQCommerceObservation, 
-    UrbanQCommerceState, DemandNodeStatus
-)
+
+# THE FIX: Bulletproof Docker Imports
+try:
+    from ..models import (
+        UrbanQCommerceAction, UrbanQCommerceObservation, 
+        UrbanQCommerceState, DemandNodeStatus
+    )
+except ImportError:
+    from models import (
+        UrbanQCommerceAction, UrbanQCommerceObservation, 
+        UrbanQCommerceState, DemandNodeStatus
+    )
 
 class UrbanQCommerceEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS = True
@@ -48,7 +56,6 @@ class UrbanQCommerceEnvironment(Environment):
         return obs
 
     def _obs(self, message: str) -> UrbanQCommerceObservation:
-        # THE FIX: Explicitly map the values to satisfy Pydantic's strict rules!
         nodes = [DemandNodeStatus(
                     node_id=n["id"], 
                     position=n["pos"], 
