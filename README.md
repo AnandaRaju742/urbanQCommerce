@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: indigo
 sdk: docker
 app_port: 8000
-base_path: /
+base_path: /web
 ---
 
 # Urban Q-Commerce Environment
