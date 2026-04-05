@@ -2,7 +2,6 @@ import random
 import uuid
 from openenv.core.env_server import Environment
 
-# THE FIX: Bulletproof Docker Imports
 try:
     from ..models import (
         UrbanQCommerceAction, UrbanQCommerceObservation, 
@@ -19,7 +18,7 @@ class UrbanQCommerceEnvironment(Environment):
 
     def __init__(self, task_level: str = "medium"):
         self._state = UrbanQCommerceState()
-        self._cargo, self._pos_id, self._max_steps = 0, 0, 50
+        self._cargo, self._pos_id, self._max_steps = 50, 0, 50
         self.task_level = task_level
 
     def reset(self, seed=None, episode_id=None, **kwargs) -> UrbanQCommerceObservation:
