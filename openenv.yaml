@@ -4,4 +4,10 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 8000
-
+tasks:
+  - id: "easy-static-routing"
+    config: { task_level: "easy", rate_multiplier: 1 }
+  - id: "medium-dynamic-attrition"
+    config: { task_level: "medium", rate_multiplier: 2 }
+  - id: "hard-surge-mitigation"
+    config: { task_level: "hard", rate_multiplier: 4 } # Nodes drain 4x faster!
