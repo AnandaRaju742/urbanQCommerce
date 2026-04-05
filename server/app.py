@@ -24,3 +24,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# THE FIX: Give Hugging Face the 200 OK it demands at the root path
+@app.get("/")
+def root_healthcheck():
+    return {"status": "ok", "message": "Hugging Face Health Check Passed!"}
