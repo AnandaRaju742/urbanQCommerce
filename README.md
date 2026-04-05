@@ -1,10 +1,16 @@
 ---
-title: UrbanQCommerce
-emoji: 🏃
-colorFrom: red
+title: Urban Q-Commerce
+emoji: 🚚
+colorFrom: blue
 colorTo: indigo
 sdk: docker
-pinned: false
+app_port: 7860
+base_path: /web
 ---
 
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+# Urban Q-Commerce Environment
+An AI Logistics Agent Environment built with OpenEnv.
+
+## Status Endpoints
+* `/health` - Standard OpenEnv health check
+* `/docs` - OpenAPI documentation
