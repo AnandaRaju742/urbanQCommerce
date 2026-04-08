@@ -37,8 +37,6 @@ class UrbanQCommerceEnvironment(Environment):
         # 1. Scaling difficulty based on task_level/config
         # This ensures 'Hard' is actually harder than 'Easy'
         multiplier = kwargs.get("rate_multiplier", 1)
-        if self.task_level == "medium": multiplier = 2
-        if self.task_level == "hard": multiplier = 4
 
         if action.action_type == "REFILL": 
             self._cargo, self._pos_id = 50, 0

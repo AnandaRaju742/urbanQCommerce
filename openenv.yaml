@@ -6,20 +6,39 @@ app: server.app:app
 port: 8000
 
 tasks:
-  - id: "easy-static-routing"
+  - id: easy-static-routing
+    difficulty: easy
+    max_steps: 10
     config:
-      task_level: "easy"
+      task_level: easy
       rate_multiplier: 1
-    grader: "grade_easy"
+    grader:
+      type: llm
+      prompt_template: |
+        Evaluate the agent's performance in maintaining stock levels and avoiding SLA breaches.
+        Return a score strictly between 0.01 and 0.99.
+        Higher score = better inventory balance and fewer stockouts.
 
-  - id: "medium-dynamic-attrition"
+  - id: medium-dynamic-attrition
+    difficulty: medium
+    max_steps: 15
     config:
-      task_level: "medium"
+      task_level: medium
       rate_multiplier: 2
-    grader: "grade_medium"
+    grader:
+      type: llm
+      prompt_template: |
+        Evaluate how well the agent handles increasing consumption and dynamic stock depletion.
+        Return a score strictly between 0.01 and 0.99.
 
-  - id: "hard-surge-mitigation"
+  - id: hard-surge-mitigation
+    difficulty: hard
+    max_steps: 20
     config:
-      task_level: "hard"
+      task_level: hard
       rate_multiplier: 4
-    grader: "grade_hard"
+    grader:
+      type: llm
+      prompt_template: |
+        Evaluate the agent's ability to prevent stockouts under high demand pressure.
+        Return a score strictly between 0.01 and 0.99.

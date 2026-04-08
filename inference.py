@@ -4,68 +4,110 @@ import json
 import asyncio
 from openai import AsyncOpenAI
 
-# Add current directory to path to find client and models
 sys.path.append(os.getcwd())
 
 from client import UrbanQCommerceEnv
 from models import UrbanQCommerceAction
 
-# THESE MUST BE LOADED FROM ENVIRONMENT - DO NOT HARDCODE
-API_BASE_URL = os.getenv("API_BASE_URL")
-# The validator specifically looks for "API_KEY" as the variable name
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+# ✅ REQUIRED DEFAULTS
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-async def run_baseline():
-    # 1. Initialize client using THEIR proxy and THEIR key
-    client = AsyncOpenAI(
-        base_url=API_BASE_URL, 
-        api_key=API_KEY
-    )
-    
-    SPACE_URL = "https://anandarajug-urbanQCommerce.hf.space"
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
+client = AsyncOpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN
+)
+
+SPACE_URL = "https://anandarajug-urbanQCommerce.hf.space"
+
+
+async def run_task(task_id):
     env = UrbanQCommerceEnv(SPACE_URL)
-    
+
+    rewards = []
+    step_count = 0
+    success = True
+
     try:
-        result = await env.reset()
+        result = await env.reset(task_id=task_id)
         obs = result.observation
-        print(f"[START] task=easy-static-routing env=urban_q_commerce model={MODEL_NAME}")
-        
-        for step_count in range(1, 11): # 10 steps is usually enough for validation
-            # 2. ASK THE LLM FOR THE ACTION
+
+        print(f"[START] task={task_id} env=urban_q_commerce model={MODEL_NAME}", flush=True)
+
+        while True:
+            step_count += 1
+
             prompt = (
-                f"You are a Logistics AI. Current Status: Cargo={obs.fleet_cargo}, "
-                f"Nodes={[{'id': n.node_id, 'stock': n.stock_remaining} for n in obs.active_nodes]}. "
-                "Decide: REFILL or DISPATCH. If DISPATCH, provide target_node_id. "
-                "Output ONLY valid JSON: {\"action_type\": \"DISPATCH\", \"target_node_id\": 1}"
+                f"You are a logistics agent.\n"
+                f"Cargo: {obs.fleet_cargo}\n"
+                f"Nodes: {[{'id': n.node_id, 'stock': n.stock_remaining} for n in obs.active_nodes]}\n"
+                f"Choose action: REFILL or DISPATCH.\n"
+                f"Return JSON: {{\"action_type\":\"DISPATCH\",\"target_node_id\":1}}"
             )
 
-            # THIS CALL UPDATES THEIR 'LAST_ACTIVE' LOG
-            response = await client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
-            )
-            
-            # 3. Parse and execute
-            decision = json.loads(response.choices[0].message.content)
-            action = UrbanQCommerceAction(**decision)
-            
-            result = await env.step(action)
-            obs = result.observation
-            
-            print(f"[STEP] step={step_count} action={action.action_type}({action.target_node_id}) "
-                  f"reward={result.reward:.2f} done={str(result.done).lower()} error=null")
+            try:
+                response = await client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"}
+                )
 
-            if result.done:
+                decision = json.loads(response.choices[0].message.content)
+                action = UrbanQCommerceAction(**decision)
+
+                result = await env.step(action)
+                obs = result.observation
+
+                reward_str = f"{result.reward:.2f}"
+                rewards.append(reward_str)
+
+                print(
+                    f"[STEP] step={step_count} action={action.action_type}({action.target_node_id}) "
+                    f"reward={reward_str} done={str(result.done).lower()} error=null",
+                    flush=True
+                )
+
+                if result.done:
+                    break
+
+            except Exception as e:
+                success = False
+                print(
+                    f"[STEP] step={step_count} action=ERROR reward=0.00 done=true error={str(e)}",
+                    flush=True
+                )
                 break
 
-        print(f"[END] success=true steps={step_count} score={result.reward:.2f}")
-        
+        print(
+            f"[END] success={str(success).lower()} steps={step_count} rewards={','.join(rewards)}",
+            flush=True
+        )
+
     except Exception as e:
-        print(f"❌ CRITICAL ERROR: {str(e)}")
+        print(
+            f"[END] success=false steps=0 rewards= error={str(e)}",
+            flush=True
+        )
+
     finally:
         await env.close()
 
+
+async def main():
+    # ✅ MUST MATCH YAML EXACTLY
+    tasks = [
+        "easy-static-routing",
+        "medium-dynamic-attrition",
+        "hard-surge-mitigation"
+    ]
+
+    for task in tasks:
+        await run_task(task)
+
+
 if __name__ == "__main__":
-    asyncio.run(run_baseline())
+    asyncio.run(main())
