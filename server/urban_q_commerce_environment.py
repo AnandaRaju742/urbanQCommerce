@@ -56,6 +56,7 @@ class UrbanQCommerceEnvironment(Environment):
             if n["stock"] <= 0: 
                 n["stock"] = 0
                 self._state.total_sla_breaches += 1
+                step_reward -= 0.05
         
         done = self._state.step_count >= self._max_steps
         obs = self._obs("Step complete")
@@ -68,11 +69,13 @@ class UrbanQCommerceEnvironment(Environment):
         stock_efficiency = current_stock / total_possible_stock
         
         # Combine stock health and SLA safety
-        raw_score = (stock_efficiency * 0.6) + (0.4 * (1 - (self._state.total_sla_breaches / 100)))
-        
+        raw_score = (
+            (stock_efficiency * 0.6)
+            + (0.4 * (1 - (self._state.total_sla_breaches / 100)))
+            + step_reward
+        )        
         # FINAL CLIP: This guarantees Phase 2 passes every time
-        obs.reward = max(0.01, min(0.99, raw_score))
-        
+        obs.reward = round(max(0.01, min(0.99, raw_score)), 2)        
         return obs
 
     def _obs(self, message: str) -> UrbanQCommerceObservation:
