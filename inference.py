@@ -1,128 +1,157 @@
 import os
-import sys
 import json
 import asyncio
 from openai import AsyncOpenAI
 
-sys.path.append(os.getcwd())
-
 from client import UrbanQCommerceEnv
 from models import UrbanQCommerceAction
 
-# ✅ SAFE ENV LOADING
+
+# =========================
+# ENV VARIABLES
+# =========================
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-
-# ✅ THIS IS THE IMPORTANT LINE
 API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 
 if API_KEY is None:
-    raise ValueError("API_KEY or HF_TOKEN must be set")
+    raise ValueError("API_KEY / HF_TOKEN is required")
+
 
 client = AsyncOpenAI(
     base_url=API_BASE_URL,
     api_key=API_KEY
 )
 
-SPACE_URL = "https://anandarajug-urbanQCommerce.hf.space"
 
-
-def safe_parse_action(content: str):
+# =========================
+# SAFE SCORE
+# =========================
+def safe_score(x):
     try:
-        decision = json.loads(content)
-    except Exception:
-        return {"action_type": "REFILL", "target_node_id": 1}
-
-    if decision.get("action_type") not in ["REFILL", "DISPATCH"]:
-        decision["action_type"] = "REFILL"
-
-    if (
-        "target_node_id" not in decision
-        or decision["target_node_id"] is None
-        or not isinstance(decision["target_node_id"], int)
-        or decision["target_node_id"] not in [1, 2, 3]
-    ):
-        decision["target_node_id"] = 1
-
-    return decision
+        x = float(x)
+        x = max(0.01, min(0.99, x))
+        return round(x, 2)
+    except:
+        return 0.01
 
 
+# =========================
+# LLM ACTION
+# =========================
+async def get_action(obs):
+    try:
+        prompt = (
+            f"Cargo={obs.fleet_cargo}, "
+            f"Nodes={[{'id': n.node_id, 'stock': n.stock_remaining} for n in obs.active_nodes]}. "
+            "Return ONLY JSON: {\"action_type\":\"DISPATCH\",\"target_node_id\":1}"
+        )
+
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+
+        data = json.loads(response.choices[0].message.content)
+
+        action_type = data.get("action_type", "REFILL")
+        target = data.get("target_node_id", 1)
+
+        return UrbanQCommerceAction(
+            action_type=action_type,
+            target_node_id=target
+        ), None
+
+    except Exception as e:
+        return None, str(e)
+
+
+# =========================
+# RUN TASK
+# =========================
 async def run_task(task_id):
+    SPACE_URL = os.getenv(
+        "SPACE_URL",
+        "https://anandarajug-urbanQCommerce.hf.space"
+    )
+
     env = UrbanQCommerceEnv(SPACE_URL)
 
     rewards = []
-    step_count = 0
+    steps = 0
     success = True
-
-    print(f"[START] task={task_id} env=urban_q_commerce model={MODEL_NAME}", flush=True)
 
     try:
         result = await env.reset(task_id=task_id)
         obs = result.observation
 
-        while True:
-            step_count += 1
+        print(
+            f"[START] task={task_id} env=urban_q_commerce model={MODEL_NAME}",
+            flush=True
+        )
 
-            try:
-                response = await client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[{
-                        "role": "user",
-                        "content": "Return JSON: {\"action_type\":\"DISPATCH\",\"target_node_id\":1}"
-                    }],
-                    response_format={"type": "json_object"}
-                )
+        for step in range(1, 51):
+            steps = step
 
-                content = response.choices[0].message.content
-                decision = safe_parse_action(content)
+            action, error = await get_action(obs)
 
-                try:
-                    action = UrbanQCommerceAction(**decision)
-                except Exception:
-                    action = UrbanQCommerceAction(action_type="REFILL", target_node_id=1)
-
-                result = await env.step(action)
-                obs = result.observation
-
-                reward_str = f"{result.reward:.2f}"
-                rewards.append(reward_str)
-
-                print(
-                    f"[STEP] step={step_count} action={action.action_type}({action.target_node_id}) "
-                    f"reward={reward_str} done={str(result.done).lower()} error=null",
-                    flush=True
-                )
-
-                if result.done:
-                    break
-
-            except Exception as e:
+            if error:
+                reward = 0.01
+                done = True
                 success = False
-                rewards.append("0.00")
+                error_msg = error
+            else:
+                try:
+                    result = await env.step(action)
+                    obs = result.observation
+                    reward = safe_score(result.reward)
+                    done = result.done
+                    error_msg = "null"
+                except Exception as e:
+                    reward = 0.01
+                    done = True
+                    success = False
+                    error_msg = str(e)
 
-                print(
-                    f"[STEP] step={step_count} action=REFILL(1) reward=0.00 done=false error={str(e)}",
-                    flush=True
-                )
+            rewards.append(safe_score(reward))
 
-                if step_count > 5:  # safety exit
-                    break
+            action_str = (
+                f"{action.action_type}({action.target_node_id})"
+                if action else "ERROR"
+            )
 
-        print(
-            f"[END] success={str(success).lower()} steps={step_count} rewards={','.join(rewards)}",
-            flush=True
-        )
+            print(
+                f"[STEP] step={step} action={action_str} "
+                f"reward={safe_score(reward):.2f} "
+                f"done={str(done).lower()} error={error_msg}",
+                flush=True
+            )
 
-    except Exception as e:
-        print(
-            f"[END] success=false steps=0 rewards= error={str(e)}",
-            flush=True
-        )
+            if done:
+                break
+
+    except Exception:
+        success = False
 
     finally:
-        await env.close()
+        try:
+            await env.close()   # ✅ FIXED
+        except:
+            pass
+
+        rewards_str = ",".join(f"{safe_score(r):.2f}" for r in rewards)
+
+        print(
+            f"[END] success={str(success).lower()} "
+            f"steps={steps} rewards={rewards_str}",
+            flush=True
+        )
 
 
+# =========================
+# MAIN
+# =========================
 async def main():
     tasks = [
         "easy-static-routing",
@@ -130,14 +159,9 @@ async def main():
         "hard-surge-mitigation"
     ]
 
-    for task in tasks:
-        await run_task(task)
+    for t in tasks:
+        await run_task(t)
 
 
-# ✅ SAFE ENTRY POINT
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        # LAST RESORT: always print something
-        print(f"[END] success=false steps=0 rewards= error={str(e)}", flush=True)
+    asyncio.run(main())

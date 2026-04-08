@@ -1,0 +1,40 @@
+spec_version: "1.0"
+name: urban_q_commerce
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+tasks:
+  - id: easy-static-routing
+    description: Basic routing with static demand
+    difficulty: easy
+    steps: 50
+    config:
+      task_level: easy
+      rate_multiplier: 1
+    grader:
+      type: python
+      entrypoint: server.urban_q_commerce_environment:compute_score
+
+  - id: medium-dynamic-attrition
+    description: Dynamic consumption and balancing
+    difficulty: medium
+    steps: 50
+    config:
+      task_level: medium
+      rate_multiplier: 2
+    grader:
+      type: python
+      entrypoint: server.urban_q_commerce_environment:compute_score
+
+  - id: hard-surge-mitigation
+    description: High demand surge handling
+    difficulty: hard
+    steps: 50
+    config:
+      task_level: hard
+      rate_multiplier: 4
+    grader:
+      type: python
+      entrypoint: server.urban_q_commerce_environment:compute_score
