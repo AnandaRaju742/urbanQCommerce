@@ -91,3 +91,74 @@ class UrbanQCommerceEnvironment(Environment):
 
     @property
     def state(self) -> UrbanQCommerceState: return self._state
+
+import os
+from openai import OpenAI
+
+def compute_score(trajectory, **kwargs):
+    """
+    Hybrid grader:
+    - Uses environment reward (deterministic)
+    - Optionally uses LLM for intelligence
+    - ALWAYS clamps to (0,1)
+    """
+
+    try:
+        if not trajectory:
+            return 0.01
+
+        # ✅ Base score from environment
+        final_reward = trajectory[-1].reward or 0.01
+
+        # -----------------------------
+        # OPTIONAL: LLM evaluation
+        # -----------------------------
+        use_llm = False  # 🔴 TURN ON only if needed
+
+        if use_llm:
+            try:
+                API_BASE_URL = os.getenv("API_BASE_URL")
+                API_KEY = os.getenv("API_KEY")
+                MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+
+                client = OpenAI(
+                    base_url=API_BASE_URL,
+                    api_key=API_KEY
+                )
+
+                summary = f"""
+                Steps: {len(trajectory)}
+                Final reward: {final_reward}
+                """
+
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[{
+                        "role": "user",
+                        "content": f"""
+                        Evaluate agent performance.
+
+                        Return ONLY a number between 0.01 and 0.99.
+                        NEVER return 0.0 or 1.0.
+
+                        {summary}
+                        """
+                    }]
+                )
+
+                llm_score = float(response.choices[0].message.content.strip())
+
+                # Blend scores
+                final_score = (0.7 * final_reward) + (0.3 * llm_score)
+
+            except Exception:
+                final_score = final_reward
+
+        else:
+            final_score = final_reward
+
+        # ✅ FINAL SAFETY CLAMP (CRITICAL)
+        return max(0.01, min(0.99, float(final_score)))
+
+    except Exception:
+        return 0.01
