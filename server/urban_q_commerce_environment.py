@@ -94,31 +94,3 @@ class UrbanQCommerceEnvironment(Environment):
 
     @property
     def state(self) -> UrbanQCommerceState: return self._state
-
-import os
-from openai import OpenAI
-
-def compute_score(trajectory, **kwargs):
-    try:
-        if not trajectory:
-            return 0.01
-
-        rewards = [step.reward for step in trajectory if step.reward is not None]
-
-        if not rewards:
-            return 0.01
-
-        # ✅ average score
-        score = sum(rewards) / len(rewards)
-
-        # ✅ clamp to safe visible range
-        score = max(0.01, min(0.99, float(score)))
-
-        # ✅ round to 2 decimals
-        score = round(score, 2)
-
-        # 🔴 clamp again after rounding (VERY IMPORTANT)
-        return max(0.01, min(0.99, score))
-
-    except Exception:
-        return 0.01

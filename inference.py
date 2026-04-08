@@ -25,15 +25,14 @@ client = AsyncOpenAI(
 
 
 # =========================
-# SAFE SCORE
+# SAFE SCORE (STRICT)
 # =========================
 def safe_score(x):
     try:
         x = float(x)
-        x = max(0.01, min(0.99, x))
-        return round(x, 2)
+        return max(1e-6, min(x, 1 - 1e-6))
     except:
-        return 0.01
+        return 1e-6
 
 
 # =========================
@@ -97,7 +96,7 @@ async def run_task(task_id):
             action, error = await get_action(obs)
 
             if error:
-                reward = 0.01
+                reward = 1e-6
                 done = True
                 success = False
                 error_msg = error
@@ -109,7 +108,7 @@ async def run_task(task_id):
                     done = result.done
                     error_msg = "null"
                 except Exception as e:
-                    reward = 0.01
+                    reward = 1e-6
                     done = True
                     success = False
                     error_msg = str(e)
@@ -136,9 +135,18 @@ async def run_task(task_id):
 
     finally:
         try:
-            await env.close()   # ✅ FIXED
+            await env.close()
         except:
             pass
+
+        # =========================
+        # FINAL SCORE (MANDATORY FIX)
+        # =========================
+        score = sum(rewards) / len(rewards) if rewards else 0.0
+        score = max(1e-6, min(score, 1 - 1e-6))
+
+        SUCCESS_SCORE_THRESHOLD = 0.5
+        success = success and (score >= SUCCESS_SCORE_THRESHOLD)
 
         rewards_str = ",".join(f"{safe_score(r):.2f}" for r in rewards)
 
