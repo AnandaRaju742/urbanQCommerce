@@ -12,15 +12,16 @@ from models import UrbanQCommerceAction
 # ✅ SAFE ENV LOADING
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-HF_TOKEN = os.getenv("HF_TOKEN")
 
-# ⚠️ DO NOT CRASH — fallback dummy token for local
-if HF_TOKEN is None:
-    HF_TOKEN = "dummy-key"
+# ✅ THIS IS THE IMPORTANT LINE
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+
+if API_KEY is None:
+    raise ValueError("API_KEY or HF_TOKEN must be set")
 
 client = AsyncOpenAI(
     base_url=API_BASE_URL,
-    api_key=HF_TOKEN
+    api_key=API_KEY
 )
 
 SPACE_URL = "https://anandarajug-urbanQCommerce.hf.space"
