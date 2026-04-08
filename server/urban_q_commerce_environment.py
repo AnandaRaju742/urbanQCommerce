@@ -100,24 +100,22 @@ def compute_score(trajectory, **kwargs):
         if not trajectory:
             return 0.01
 
-        steps_taken = len(trajectory)
-        max_steps = kwargs.get("max_steps", 50)
+        rewards = [step.reward for step in trajectory if step.reward is not None]
 
-        # 🔴 If agent exceeds allowed steps → fail-safe
-        if steps_taken >= max_steps:
+        if not rewards:
             return 0.01
 
-        # Base score (last reward)
-        total = trajectory[-1].reward or 0.01
+        # ✅ average score
+        score = sum(rewards) / len(rewards)
 
-        # ✅ Clamp FIRST, then round safely
-        total = max(0.01, min(0.99, float(total)))
+        # ✅ clamp to safe visible range
+        score = max(0.01, min(0.99, float(score)))
 
-        # ✅ Round but keep safe bounds
-        total = round(total, 2)
+        # ✅ round to 2 decimals
+        score = round(score, 2)
 
-        # 🔴 Safety clamp AGAIN (after rounding)
-        return max(0.01, min(0.99, total))
+        # 🔴 clamp again after rounding (VERY IMPORTANT)
+        return max(0.01, min(0.99, score))
 
     except Exception:
         return 0.01
