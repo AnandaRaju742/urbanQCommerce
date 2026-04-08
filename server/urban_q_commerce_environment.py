@@ -96,69 +96,28 @@ import os
 from openai import OpenAI
 
 def compute_score(trajectory, **kwargs):
-    """
-    Hybrid grader:
-    - Uses environment reward (deterministic)
-    - Optionally uses LLM for intelligence
-    - ALWAYS clamps to (0,1)
-    """
-
     try:
         if not trajectory:
             return 0.01
 
-        # ✅ Base score from environment
-        final_reward = trajectory[-1].reward or 0.01
+        steps_taken = len(trajectory)
+        max_steps = kwargs.get("max_steps", 50)
 
-        # -----------------------------
-        # OPTIONAL: LLM evaluation
-        # -----------------------------
-        use_llm = False  # 🔴 TURN ON only if needed
+        # 🔴 If agent exceeds allowed steps → fail-safe
+        if steps_taken >= max_steps:
+            return 0.01
 
-        if use_llm:
-            try:
-                API_BASE_URL = os.getenv("API_BASE_URL")
-                API_KEY = os.getenv("API_KEY")
-                MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+        # Base score (last reward)
+        total = trajectory[-1].reward or 0.01
 
-                client = OpenAI(
-                    base_url=API_BASE_URL,
-                    api_key=API_KEY
-                )
+        # ✅ Clamp FIRST, then round safely
+        total = max(0.01, min(0.99, float(total)))
 
-                summary = f"""
-                Steps: {len(trajectory)}
-                Final reward: {final_reward}
-                """
+        # ✅ Round but keep safe bounds
+        total = round(total, 2)
 
-                response = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[{
-                        "role": "user",
-                        "content": f"""
-                        Evaluate agent performance.
-
-                        Return ONLY a number between 0.01 and 0.99.
-                        NEVER return 0.0 or 1.0.
-
-                        {summary}
-                        """
-                    }]
-                )
-
-                llm_score = float(response.choices[0].message.content.strip())
-
-                # Blend scores
-                final_score = (0.7 * final_reward) + (0.3 * llm_score)
-
-            except Exception:
-                final_score = final_reward
-
-        else:
-            final_score = final_reward
-
-        # ✅ FINAL SAFETY CLAMP (CRITICAL)
-        return max(0.01, min(0.99, float(final_score)))
+        # 🔴 Safety clamp AGAIN (after rounding)
+        return max(0.01, min(0.99, total))
 
     except Exception:
         return 0.01
