@@ -9,7 +9,7 @@ tasks:
   - id: easy-static-routing
     description: Basic routing with static demand
     difficulty: easy
-    steps: 10
+    steps: 7
     config:
       task_level: easy
       rate_multiplier: 1
@@ -20,7 +20,7 @@ tasks:
   - id: medium-dynamic-attrition
     description: Dynamic consumption and balancing
     difficulty: medium
-    steps: 50
+    steps: 7
     config:
       task_level: medium
       rate_multiplier: 2
@@ -31,7 +31,7 @@ tasks:
   - id: hard-surge-mitigation
     description: High demand surge handling
     difficulty: hard
-    steps: 50
+    steps: 7
     config:
       task_level: hard
       rate_multiplier: 4
