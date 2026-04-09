@@ -30,9 +30,14 @@ client = AsyncOpenAI(
 def safe_score(x):
     try:
         x = float(x)
-        return max(1e-6, min(x, 1 - 1e-6))
+
+        # 🔥 HARD FLOOR to avoid 0.00 after formatting
+        x = max(0.01, min(x, 0.99))
+
+        return round(x, 2)
+
     except:
-        return 1e-6
+        return 0.01
 
 
 # =========================
