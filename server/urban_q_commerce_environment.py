@@ -32,15 +32,19 @@ class UrbanQCommerceEnvironment(Environment):
 
     def step(self, action: UrbanQCommerceAction, **kwargs) -> UrbanQCommerceObservation:
         self._state.step_count += 1
+        step_reward = 0.0
+        
         if action.action_type == "REFILL":
             self._cargo, self._pos_id = 50, 0
+            step_reward = 0.05
         elif action.action_type == "DISPATCH":
             node = self._state.nodes.get(action.target_node_id)
-            if node:
+            if node and self._cargo > 0:
                 self._pos_id = action.target_node_id
                 transfer = min(self._cargo, node["max"] - node["stock"])
                 node["stock"] += transfer
                 self._cargo -= transfer
+                step_reward = 0.2
 
         for n in self._state.nodes.values():
             n["stock"] -= n["rate"]
@@ -52,12 +56,11 @@ class UrbanQCommerceEnvironment(Environment):
         obs = self._obs("Step complete")
         obs.done = done
 
-        # FINAL FIX: Strictly between 0 and 1
         if done:
             raw_reward = 1.0 - (self._state.total_sla_breaches * 0.05)
             obs.reward = max(0.001, min(0.999, raw_reward))
         else:
-            obs.reward = 0.0
+            obs.reward = step_reward
 
         return obs
 
