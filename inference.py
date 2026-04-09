@@ -30,14 +30,29 @@ client = AsyncOpenAI(
 def safe_score(x):
     try:
         x = float(x)
-
-        # 🔥 HARD FLOOR to avoid 0.00 after formatting
-        x = max(0.01, min(x, 0.99))
-
-        return round(x, 2)
-
+        # 🔥 HARD clamp BEFORE formatting
+        if x <= 0.0:
+            return 0.01
+        if x >= 1.0:
+            return 0.99
+        return max(0.01, min(x, 0.99))
     except:
         return 0.01
+
+
+# =========================
+# SAFE FORMAT (CRITICAL FIX)
+# =========================
+def safe_format(x):
+    x = safe_score(x)
+
+    # 🔥 CRITICAL: prevent rounding to 0.00 or 1.00
+    if x <= 0.01:
+        return "0.01"
+    if x >= 0.99:
+        return "0.99"
+
+    return f"{x:.2f}"
 
 
 # =========================
@@ -59,12 +74,9 @@ async def get_action(obs):
 
         data = json.loads(response.choices[0].message.content)
 
-        action_type = data.get("action_type", "REFILL")
-        target = data.get("target_node_id", 1)
-
         return UrbanQCommerceAction(
-            action_type=action_type,
-            target_node_id=target
+            action_type=data.get("action_type", "REFILL"),
+            target_node_id=data.get("target_node_id", 1)
         ), None
 
     except Exception as e:
@@ -101,7 +113,7 @@ async def run_task(task_id):
             action, error = await get_action(obs)
 
             if error:
-                reward = 1e-6
+                reward = 0.01
                 done = True
                 success = False
                 error_msg = error
@@ -113,7 +125,7 @@ async def run_task(task_id):
                     done = result.done
                     error_msg = "null"
                 except Exception as e:
-                    reward = 1e-6
+                    reward = 0.01
                     done = True
                     success = False
                     error_msg = str(e)
@@ -127,7 +139,7 @@ async def run_task(task_id):
 
             print(
                 f"[STEP] step={step} action={action_str} "
-                f"reward={safe_score(reward):.2f} "
+                f"reward={safe_format(reward)} "
                 f"done={str(done).lower()} error={error_msg}",
                 flush=True
             )
@@ -145,15 +157,15 @@ async def run_task(task_id):
             pass
 
         # =========================
-        # FINAL SCORE (MANDATORY FIX)
+        # FINAL SCORE (STRICT SAFE)
         # =========================
-        score = sum(rewards) / len(rewards) if rewards else 0.0
-        score = max(1e-6, min(score, 1 - 1e-6))
+        score = sum(rewards) / len(rewards) if rewards else 0.01
+        score = safe_score(score)
 
         SUCCESS_SCORE_THRESHOLD = 0.5
         success = success and (score >= SUCCESS_SCORE_THRESHOLD)
 
-        rewards_str = ",".join(f"{safe_score(r):.2f}" for r in rewards)
+        rewards_str = ",".join(safe_format(r) for r in rewards)
 
         print(
             f"[END] success={str(success).lower()} "
