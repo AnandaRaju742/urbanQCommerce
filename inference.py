@@ -126,7 +126,7 @@ async def run_task(task_id):
             flush=True
         )
 
-        for step in range(1, 51):
+        for step in range(1, 7):
             steps = step
 
             action, error = await get_action(obs)
