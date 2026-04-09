@@ -188,7 +188,7 @@ async def run_task(task_id):
 
         print(
             f"[END] success={str(success).lower()} "
-            f"steps={steps} rewards={rewards_str}",
+            f"steps={steps} score={score:.4f} rewards={rewards_str}",
             flush=True
         )
 
