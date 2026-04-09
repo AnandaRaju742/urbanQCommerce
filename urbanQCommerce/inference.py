@@ -1,143 +1,73 @@
 import os
-import sys
 import json
 import asyncio
-from openai import AsyncOpenAI
+from openai import OpenAI
+try:
+    from client import UrbanQCommerceEnv
+    from models import UrbanQCommerceAction
+except ImportError:
+    from urban_q_commerce.client import UrbanQCommerceEnv
+    from urban_q_commerce.models import UrbanQCommerceAction
 
-sys.path.append(os.getcwd())
-
-from client import UrbanQCommerceEnv
-from models import UrbanQCommerceAction
-
-# ✅ SAFE ENV LOADING
+# 1. OpenEnv Mandatory Configuration (Injected by Judges)
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-# ✅ THIS IS THE IMPORTANT LINE
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+# Initialize the mandatory OpenAI client
+llm_client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
 
-if API_KEY is None:
-    raise ValueError("API_KEY or HF_TOKEN must be set")
-
-client = AsyncOpenAI(
-    base_url=API_BASE_URL,
-    api_key=API_KEY
-)
-
-SPACE_URL = "https://anandarajug-urbanQCommerce.hf.space"
-
-
-def safe_parse_action(content: str):
+async def run_task(task_id: str, server_url: str = "http://localhost:8000"):
+    env = UrbanQCommerceEnv(server_url)
+    
     try:
-        decision = json.loads(content)
-    except Exception:
-        return {"action_type": "REFILL", "target_node_id": 1}
-
-    if decision.get("action_type") not in ["REFILL", "DISPATCH"]:
-        decision["action_type"] = "REFILL"
-
-    if (
-        "target_node_id" not in decision
-        or decision["target_node_id"] is None
-        or not isinstance(decision["target_node_id"], int)
-        or decision["target_node_id"] not in [1, 2, 3]
-    ):
-        decision["target_node_id"] = 1
-
-    return decision
-
-
-async def run_task(task_id):
-    env = UrbanQCommerceEnv(SPACE_URL)
-
-    rewards = []
-    step_count = 0
-    success = True
-
-    print(f"[START] task={task_id} env=urban_q_commerce model={MODEL_NAME}", flush=True)
-
-    try:
-        result = await env.reset(task_id=task_id)
+        # [START] tag is mandatory
+        print(f"[START] task={task_id} env=urban_q_commerce model={MODEL_NAME}", flush=True)
+        
+        result = await env.reset()
         obs = result.observation
+        done = False
+        step_count = 0
+        total_reward = 0.0
 
-        while True:
+        while not done and step_count < 50:
             step_count += 1
+            
+            prompt = f"Target Node ID 0 is Dark Store. Nodes: {json.dumps([n.model_dump() for n in obs.active_nodes])}. Cargo: {obs.fleet_cargo}. Choose DISPATCH or REFILL."
+            
+            response = llm_client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
 
-            try:
-                response = await client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[{
-                        "role": "user",
-                        "content": "Return JSON: {\"action_type\":\"DISPATCH\",\"target_node_id\":1}"
-                    }],
-                    response_format={"type": "json_object"}
-                )
+            action_data = json.loads(response.choices[0].message.content)
+            action = UrbanQCommerceAction(**action_data)
 
-                content = response.choices[0].message.content
-                decision = safe_parse_action(content)
+            step_result = await env.step(action)
+            obs = step_result.observation
+            done = step_result.done
+            reward = step_result.reward
+            total_reward = reward # Grader gives final score on last step
 
-                try:
-                    action = UrbanQCommerceAction(**decision)
-                except Exception:
-                    action = UrbanQCommerceAction(action_type="REFILL", target_node_id=1)
+            # [STEP] tag is mandatory
+            print(f"[STEP] step={step_count} action={action.action_type}({action.target_node_id}) reward={reward:.2f} done={str(done).lower()} error=null", flush=True)
 
-                result = await env.step(action)
-                obs = result.observation
-
-                reward_str = f"{result.reward:.2f}"
-                rewards.append(reward_str)
-
-                print(
-                    f"[STEP] step={step_count} action={action.action_type}({action.target_node_id}) "
-                    f"reward={reward_str} done={str(result.done).lower()} error=null",
-                    flush=True
-                )
-
-                if result.done:
-                    break
-
-            except Exception as e:
-                success = False
-                rewards.append("0.00")
-
-                print(
-                    f"[STEP] step={step_count} action=REFILL(1) reward=0.00 done=false error={str(e)}",
-                    flush=True
-                )
-
-                if step_count > 5:  # safety exit
-                    break
-
-        print(
-            f"[END] success={str(success).lower()} steps={step_count} rewards={','.join(rewards)}",
-            flush=True
-        )
+        # [END] tag is mandatory
+        print(f"[END] task={task_id} score={total_reward:.2f} steps={step_count} success=true", flush=True)
+        return total_reward
 
     except Exception as e:
-        print(
-            f"[END] success=false steps=0 rewards= error={str(e)}",
-            flush=True
-        )
-
+        print(f"[END] task={task_id} score=0.0 steps=0 success=false error={str(e)}", flush=True)
+        return 0.0
     finally:
         await env.close()
 
-
 async def main():
-    tasks = [
-        "easy-static-routing",
-        "medium-dynamic-attrition",
-        "hard-surge-mitigation"
-    ]
-
+    # The validator usually looks for these specific task IDs from your openenv.yaml
+    tasks = ["easy-static-routing", "medium-dynamic-attrition", "hard-surge-mitigation"]
     for task in tasks:
-        await run_task(task)
+        await run_task(task, "http://127.0.0.1:8000")
 
-
-# ✅ SAFE ENTRY POINT
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        # LAST RESORT: always print something
-        print(f"[END] success=false steps=0 rewards= error={str(e)}", flush=True)
+    asyncio.run(main())
