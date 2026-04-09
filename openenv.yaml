@@ -1,6 +1,8 @@
-spec_version: "1.0"
 name: urban_q_commerce
-type: space
+description: >
+  An OpenEnv-compliant environment for Supply-Chain RL.
+version: "1.0.0"
+author: MikeMohan
 runtime: fastapi
 app: server.app:app
 port: 8000
