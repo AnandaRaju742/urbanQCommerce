@@ -60,10 +60,27 @@ def safe_format(x):
 # =========================
 async def get_action(obs):
     try:
-        prompt = (
-            f"Cargo={obs.fleet_cargo}, "
-            f"Nodes={[{'id': n.node_id, 'stock': n.stock_remaining} for n in obs.active_nodes]}. "
-            "Return ONLY JSON: {\"action_type\":\"DISPATCH\",\"target_node_id\":1}"
+        prompt = (f"""
+You are controlling a delivery fleet.
+
+Current state:
+- Cargo: {obs.fleet_cargo}
+- Nodes: {[{'id': n.node_id, 'stock': n.stock_remaining} for n in obs.active_nodes]}
+
+Available actions:
+1. DISPATCH(node_id) → send stock to node
+2. REFILL() → refill cargo at warehouse
+
+Rules:
+- Choose node with LOW stock
+- Avoid sending to FULL nodes
+- Use REFILL if cargo is low
+
+Return ONLY JSON:
+{{"action_type": "DISPATCH", "target_node_id": <id>}}
+OR
+{{"action_type": "REFILL"}}
+"""
         )
 
         response = await client.chat.completions.create(
