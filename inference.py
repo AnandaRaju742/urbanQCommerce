@@ -12,10 +12,11 @@ from models import UrbanQCommerceAction
 # =========================
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 
-if API_KEY is None:
-    raise ValueError("API_KEY / HF_TOKEN is required")
+API_KEY = os.getenv("API_KEY")
+
+if not API_KEY:
+    raise ValueError("API_KEY is required")
 
 
 client = AsyncOpenAI(
