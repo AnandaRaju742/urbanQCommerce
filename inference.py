@@ -126,8 +126,8 @@ async def run_task(task_id):
             flush=True
         )
 
-        while obs.steps_remaining > 0 and not obs.done:
-            steps = steps+1
+        for step in range(1, 7):
+            steps = step
 
             action, error = await get_action(obs)
 
@@ -157,7 +157,7 @@ async def run_task(task_id):
             )
 
             print(
-                f"[STEP] step={steps} action={action_str} "
+                f"[STEP] step={step} action={action_str} "
                 f"reward={safe_format(reward)} "
                 f"done={str(done).lower()} error={error_msg}",
                 flush=True
