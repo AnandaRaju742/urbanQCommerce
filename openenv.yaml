@@ -22,7 +22,7 @@ tasks:
   - id: medium-dynamic-attrition
     description: Dynamic consumption and balancing
     difficulty: medium
-    steps: 9
+    steps: 7
     config:
       task_level: medium
       rate_multiplier: 2
@@ -33,7 +33,7 @@ tasks:
   - id: hard-surge-mitigation
     description: High demand surge handling
     difficulty: hard
-    steps: 11
+    steps: 7
     config:
       task_level: hard
       rate_multiplier: 4
